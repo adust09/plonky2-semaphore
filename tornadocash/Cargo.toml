@@ -1,0 +1,7 @@
+[package]
+name = "tornadocash"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+plonky2 = { git = "https://github.com/mir-protocol/plonky2"}
