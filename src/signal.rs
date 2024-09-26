@@ -31,15 +31,12 @@ mod tests {
     fn test_semaphore() -> Result<()> {
         let n = 1 << 20;
 
-        // 修正点 1: identity_nullifierとidentity_trapdoorのペアを生成
         let private_keys: Vec<(Digest, Digest)> =
             (0..n).map(|_| (F::rand_array(), F::rand_array())).collect();
 
-        // 修正点 2: アイデンティティコミットメントの計算
         let identity_commitments: Vec<Vec<F>> = private_keys
             .iter()
             .map(|(identity_nullifier, identity_trapdoor)| {
-                // 修正: 配列を結合する方法を変更
                 let input: Vec<F> = identity_nullifier
                     .iter()
                     .chain(identity_trapdoor.iter())
@@ -50,7 +47,6 @@ mod tests {
             })
             .collect();
 
-        // 以下、残りのコードはそのまま
         let access_set = AccessSet(MerkleTree::new(identity_commitments, 0));
 
         let i = 12;

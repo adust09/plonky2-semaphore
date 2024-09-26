@@ -15,7 +15,7 @@ use plonky2::{
 use crate::{
     circuit::SemaphoreTargets,
     signal::{Digest, Signal, C, F},
-}; // SemaphoreTargetsをインポート
+};
 
 pub struct AccessSet(pub MerkleTree<F, PoseidonHash>);
 
@@ -49,7 +49,7 @@ impl AccessSet {
         external_nullifier: Digest,
         public_key_index: usize,
         circuit_data: &CircuitData<F, C, 2>,
-        targets: &SemaphoreTargets, // 修正点：参照を受け取る
+        targets: &SemaphoreTargets,
     ) -> Result<Signal> {
         // Compute nullifier: hash(identity_nullifier, external_nullifier)
         let nullifier_hash =
@@ -57,7 +57,6 @@ impl AccessSet {
 
         let mut pw = PartialWitness::new();
 
-        // 修正点：参照をそのまま渡す
         self.fill_semaphore_targets(
             &mut pw,
             identity_nullifier,
@@ -79,7 +78,6 @@ impl AccessSet {
         let config = CircuitConfig::standard_recursion_zk_config();
         let mut builder = CircuitBuilder::new(config);
 
-        // 回路を構築し、SemaphoreTargetsを取得
         let targets = self.semaphore_circuit(&mut builder);
 
         let circuit_data = builder.build();
