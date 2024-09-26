@@ -12,14 +12,17 @@ use plonky2::{
     },
 };
 
-use crate::signal::{Digest, Signal, C, F};
+use crate::{
+    circuit::SemaphoreTargets,
+    signal::{Digest, Signal, C, F},
+}; // SemaphoreTargetsをインポート
 
 pub struct AccessSet(pub MerkleTree<F, PoseidonHash>);
 
 impl AccessSet {
     pub fn verify_signal(
         &self,
-        topic: Digest,
+        external_nullifier: Digest,
         signal: Signal,
         verifier_data: &VerifierCircuitData<F, C, 2>,
     ) -> Result<()> {
@@ -30,7 +33,7 @@ impl AccessSet {
             .iter()
             .flat_map(|h| h.elements)
             .chain(signal.nullifier)
-            .chain(topic)
+            .chain(external_nullifier)
             .collect();
 
         verifier_data.verify(ProofWithPublicInputs {
@@ -41,30 +44,50 @@ impl AccessSet {
 
     pub fn make_signal(
         &self,
-        private_key: Digest,
-        topic: Digest,
+        identity_nullifier: Digest,
+        identity_trapdoor: Digest,
+        external_nullifier: Digest,
         public_key_index: usize,
-    ) -> Result<(Signal, VerifierCircuitData<F, C, 2>)> {
-        let nullifier = PoseidonHash::hash_no_pad(&[private_key, topic].concat()).elements;
-        let config = CircuitConfig::standard_recursion_zk_config();
-        let mut builder = CircuitBuilder::new(config);
+        circuit_data: &CircuitData<F, C, 2>,
+        targets: &SemaphoreTargets, // 修正点：参照を受け取る
+    ) -> Result<Signal> {
+        // Compute nullifier: hash(identity_nullifier, external_nullifier)
+        let nullifier_hash =
+            PoseidonHash::hash_no_pad(&[identity_nullifier, external_nullifier].concat()).elements;
+
         let mut pw = PartialWitness::new();
 
-        let targets = self.semaphore_circuit(&mut builder);
-        self.fill_semaphore_targets(&mut pw, private_key, topic, public_key_index, targets);
+        // 修正点：参照をそのまま渡す
+        self.fill_semaphore_targets(
+            &mut pw,
+            identity_nullifier,
+            identity_trapdoor,
+            external_nullifier,
+            public_key_index,
+            targets.clone(),
+        );
 
-        let data = builder.build();
-        let proof = data.prove(pw)?;
+        let proof_with_pis = circuit_data.prove(pw)?;
 
-        Ok((
-            Signal {
-                nullifier,
-                proof: proof.proof,
-            },
-            Self::to_verifier_data(data),
-        ))
+        Ok(Signal {
+            nullifier: nullifier_hash,
+            proof: proof_with_pis.proof,
+        })
     }
-    pub fn to_verifier_data(circuit_data: CircuitData<F, C, 2>) -> VerifierCircuitData<F, C, 2> {
+
+    pub fn build_circuit(&self) -> (CircuitData<F, C, 2>, SemaphoreTargets) {
+        let config = CircuitConfig::standard_recursion_zk_config();
+        let mut builder = CircuitBuilder::new(config);
+
+        // 回路を構築し、SemaphoreTargetsを取得
+        let targets = self.semaphore_circuit(&mut builder);
+
+        let circuit_data = builder.build();
+
+        (circuit_data, targets)
+    }
+
+    pub fn to_verifier_data(circuit_data: &CircuitData<F, C, 2>) -> VerifierCircuitData<F, C, 2> {
         VerifierCircuitData {
             verifier_only: circuit_data.verifier_only.clone(),
             common: circuit_data.common.clone(),

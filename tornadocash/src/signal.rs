@@ -18,7 +18,7 @@ pub struct Signal {
 mod tests {
     use anyhow::Result;
     use plonky2::{
-        field::types::{Field, Sample},
+        field::types::Sample,
         hash::{merkle_tree::MerkleTree, poseidon::PoseidonHash},
         plonk::config::Hasher,
     };
@@ -27,25 +27,46 @@ mod tests {
         access_set::AccessSet,
         signal::{Digest, F},
     };
-
     #[test]
     fn test_semaphore() -> Result<()> {
         let n = 1 << 20;
-        let private_keys: Vec<Digest> = (0..n).map(|_| F::rand_array()).collect();
-        let public_keys: Vec<Vec<F>> = private_keys
+
+        // 修正点 1: identity_nullifierとidentity_trapdoorのペアを生成
+        let private_keys: Vec<(Digest, Digest)> =
+            (0..n).map(|_| (F::rand_array(), F::rand_array())).collect();
+
+        // 修正点 2: アイデンティティコミットメントの計算
+        let identity_commitments: Vec<Vec<F>> = private_keys
             .iter()
-            .map(|&sk| {
-                PoseidonHash::hash_no_pad(&[sk, [F::ZERO; 4]].concat())
-                    .elements
-                    .to_vec()
+            .map(|(identity_nullifier, identity_trapdoor)| {
+                // 修正: 配列を結合する方法を変更
+                let input: Vec<F> = identity_nullifier
+                    .iter()
+                    .chain(identity_trapdoor.iter())
+                    .cloned()
+                    .collect();
+
+                PoseidonHash::hash_no_pad(&input).elements.to_vec()
             })
             .collect();
-        let access_set = AccessSet(MerkleTree::new(public_keys, 0));
+
+        // 以下、残りのコードはそのまま
+        let access_set = AccessSet(MerkleTree::new(identity_commitments, 0));
 
         let i = 12;
-        let topic = F::rand_array();
+        let external_nullifier = F::rand_array();
 
-        let (signal, vd) = access_set.make_signal(private_keys[i], topic, i)?;
-        access_set.verify_signal(topic, signal, &vd)
+        let (circuit_data, targets) = access_set.build_circuit();
+        let verifier_data = AccessSet::to_verifier_data(&circuit_data);
+
+        let signal = access_set.make_signal(
+            private_keys[i].0, // identity_nullifier
+            private_keys[i].1, // identity_trapdoor
+            external_nullifier,
+            i,
+            &circuit_data,
+            &targets,
+        )?;
+        access_set.verify_signal(external_nullifier, signal, &verifier_data)
     }
 }
