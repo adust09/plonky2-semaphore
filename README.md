@@ -1,6 +1,6 @@
 # Plonky2 implementation of the [Semaphore protocol](http://semaphore.appliedzkp.org/)
 
-Used as an example in the ZKHack Plonky2 presentation.
+This is traced updated version of the [ZKHack Plonky2](https://github.com/0xPolygonZero/plonky2-semaphore/blob/main/src/circuit.rs).
 
 ## Compilation
 ```bash
